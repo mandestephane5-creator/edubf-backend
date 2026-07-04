@@ -1,0 +1,408 @@
+// ==========================================================
+// EduBF - Sainte Marie - Schéma Prisma v2
+// Rôles : ADMIN, SURVEILLANT (web) · PARENT (mobile)
+// ==========================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ----------------------------------------------------------
+// ENUMS
+// ----------------------------------------------------------
+
+enum Role {
+  ADMIN
+  SURVEILLANT
+  PARENT
+}
+
+enum Term {
+  TRIMESTRE_1
+  TRIMESTRE_2
+  TRIMESTRE_3
+}
+
+enum IncidentType {
+  ABSENCE
+  RETARD
+  EXPULSION
+}
+
+enum DayOfWeek {
+  LUNDI
+  MARDI
+  MERCREDI
+  JEUDI
+  VENDREDI
+  SAMEDI
+  DIMANCHE
+}
+
+enum NotificationType {
+  NOTE
+  INCIDENT
+  EVALUATION
+  SYSTEME
+}
+
+// ----------------------------------------------------------
+// ECOLE (tenant racine du SaaS)
+// ----------------------------------------------------------
+
+model School {
+  id               String   @id @default(uuid())
+  name             String
+  slug             String   @unique
+  address          String?
+  city             String?
+  country          String   @default("Burkina Faso")
+  phone            String?
+  logoUrl          String?
+  publicWebsiteUrl String? // lien vers le site vitrine de l'école, affiché dans l'app mobile
+  isActive         Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  users               User[]
+  students            Student[]
+  parents             Parent[]
+  classes             Class[]
+  subjects            Subject[]
+  grades              Grade[]
+  incidents           Incident[]
+  timetableSlots      TimetableSlot[]
+  evaluationSchedules EvaluationSchedule[]
+  compositionDates    CompositionDate[]
+  notifications       Notification[]
+
+  @@map("schools")
+}
+
+// ----------------------------------------------------------
+// UTILISATEUR (compte de connexion)
+// ADMIN/SURVEILLANT se connectent par email · PARENT par téléphone (+ matricule d'un enfant)
+// ----------------------------------------------------------
+
+model User {
+  id       String  @id @default(uuid())
+  schoolId String
+  school   School  @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  email    String? // ADMIN / SURVEILLANT uniquement
+  phone    String? // PARENT uniquement (identifiant technique interne)
+  password String
+  role     Role
+  isActive Boolean @default(true)
+
+  // Anti-brute-force
+  failedLoginAttempts Int       @default(0)
+  lockedUntil         DateTime?
+
+  refreshToken String?
+  lastLoginAt  DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  parent               Parent?
+  notifications        Notification[]
+  passwordResetTokens  PasswordResetToken[]
+  gradesEntered        Grade[]               @relation("GradeEnteredBy")
+  incidentsEntered     Incident[]            @relation("IncidentEnteredBy")
+
+  @@unique([schoolId, email])
+  @@unique([schoolId, phone])
+  @@index([schoolId])
+  @@map("users")
+}
+
+model PasswordResetToken {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@map("password_reset_tokens")
+}
+
+// ----------------------------------------------------------
+// ELEVE (simple fiche, aucun compte de connexion)
+// ----------------------------------------------------------
+
+model Student {
+  id        String    @id @default(uuid())
+  schoolId  String
+  school    School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  matricule String
+  firstName String
+  lastName  String
+  birthDate DateTime?
+  gender    String?
+
+  classId String?
+  class   Class?  @relation(fields: [classId], references: [id])
+
+  parents   StudentParent[]
+  grades    Grade[]
+  incidents Incident[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([schoolId, matricule])
+  @@index([schoolId])
+  @@index([classId])
+  @@map("students")
+}
+
+// ----------------------------------------------------------
+// PARENT
+// ----------------------------------------------------------
+
+model Parent {
+  id       String @id @default(uuid())
+  schoolId String
+  school   School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  userId   String @unique
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  firstName String
+  lastName  String
+
+  children StudentParent[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([schoolId])
+  @@map("parents")
+}
+
+model StudentParent {
+  id        String  @id @default(uuid())
+  studentId String
+  student   Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  parentId  String
+  parent    Parent  @relation(fields: [parentId], references: [id], onDelete: Cascade)
+  relation  String  @default("parent")
+
+  @@unique([studentId, parentId])
+  @@map("student_parents")
+}
+
+// ----------------------------------------------------------
+// CLASSE / MATIERE
+// ----------------------------------------------------------
+
+model Class {
+  id           String @id @default(uuid())
+  schoolId     String
+  school       School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  name         String
+  level        String
+  academicYear String
+
+  students            Student[]
+  subjects            ClassSubject[]
+  grades              Grade[]
+  timetableSlots      TimetableSlot[]
+  evaluationSchedules EvaluationSchedule[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([schoolId, name, academicYear])
+  @@index([schoolId])
+  @@map("classes")
+}
+
+model Subject {
+  id       String  @id @default(uuid())
+  schoolId String
+  school   School  @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  name     String
+  code     String?
+
+  classes             ClassSubject[]
+  grades              Grade[]
+  incidents           Incident[]
+  timetableSlots      TimetableSlot[]
+  evaluationSchedules EvaluationSchedule[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([schoolId, name])
+  @@index([schoolId])
+  @@map("subjects")
+}
+
+model ClassSubject {
+  id          String  @id @default(uuid())
+  classId     String
+  class       Class   @relation(fields: [classId], references: [id], onDelete: Cascade)
+  subjectId   String
+  subject     Subject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  coefficient Float   @default(1)
+
+  @@unique([classId, subjectId])
+  @@map("class_subjects")
+}
+
+// ----------------------------------------------------------
+// NOTES
+// ----------------------------------------------------------
+
+model Grade {
+  id       String @id @default(uuid())
+  schoolId String
+  school   School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  studentId String
+  student   Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  classId   String
+  class     Class   @relation(fields: [classId], references: [id], onDelete: Cascade)
+  subjectId String
+  subject   Subject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+
+  value        Float
+  maxValue     Float  @default(20)
+  coefficient  Float  @default(1)
+  term         Term
+  academicYear String
+  label        String?
+
+  enteredByUserId String
+  enteredBy       User   @relation("GradeEnteredBy", fields: [enteredByUserId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([schoolId])
+  @@index([studentId])
+  @@index([classId, subjectId, term, academicYear])
+  @@map("grades")
+}
+
+// ----------------------------------------------------------
+// INCIDENTS (journal mensuel : absence / retard / expulsion)
+// ----------------------------------------------------------
+
+model Incident {
+  id       String       @id @default(uuid())
+  schoolId String
+  school   School       @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  studentId String
+  student   Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  type      IncidentType
+  date      DateTime
+
+  // Expulsion uniquement
+  time      String?
+  subjectId String?
+  subject   Subject? @relation(fields: [subjectId], references: [id])
+  motif     String?
+
+  enteredByUserId String
+  enteredBy       User   @relation("IncidentEnteredBy", fields: [enteredByUserId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([schoolId])
+  @@index([studentId, date])
+  @@map("incidents")
+}
+
+// ----------------------------------------------------------
+// EMPLOI DU TEMPS (grille récurrente par classe)
+// ----------------------------------------------------------
+
+model TimetableSlot {
+  id        String    @id @default(uuid())
+  schoolId  String
+  school    School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  classId   String
+  class     Class     @relation(fields: [classId], references: [id], onDelete: Cascade)
+  day       DayOfWeek
+  startHour Int
+  endHour   Int
+  subjectId String
+  subject   Subject   @relation(fields: [subjectId], references: [id])
+
+  @@unique([classId, day, startHour])
+  @@index([schoolId])
+  @@map("timetable_slots")
+}
+
+// ----------------------------------------------------------
+// CALENDRIER D'EVALUATIONS
+// Devoirs : par classe + matière + date
+// Composition : simple liste de jours, valable pour toute l'école
+// ----------------------------------------------------------
+
+model EvaluationSchedule {
+  id           String @id @default(uuid())
+  schoolId     String
+  school       School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  classId      String
+  class        Class  @relation(fields: [classId], references: [id], onDelete: Cascade)
+  subjectId    String
+  subject      Subject @relation(fields: [subjectId], references: [id])
+  label        String // "Devoir 1", "Devoir 2"
+  date         DateTime
+  term         Term
+  academicYear String
+
+  createdAt DateTime @default(now())
+
+  @@index([schoolId])
+  @@index([classId])
+  @@map("evaluation_schedules")
+}
+
+model CompositionDate {
+  id           String   @id @default(uuid())
+  schoolId     String
+  school       School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  date         DateTime
+  term         Term
+  academicYear String
+  label        String?
+
+  createdAt DateTime @default(now())
+
+  @@index([schoolId])
+  @@map("composition_dates")
+}
+
+// ----------------------------------------------------------
+// NOTIFICATIONS
+// ----------------------------------------------------------
+
+model Notification {
+  id       String           @id @default(uuid())
+  schoolId String
+  school   School           @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  userId   String
+  user     User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type     NotificationType @default(SYSTEME)
+  title    String
+  message  String
+  isRead   Boolean          @default(false)
+
+  createdAt DateTime @default(now())
+
+  @@index([schoolId])
+  @@index([userId, isRead])
+  @@map("notifications")
+}

@@ -1,0 +1,61 @@
+import { prisma } from "../config/db";
+import { ApiError } from "../utils/ApiError";
+import { CreateIncidentInput } from "../validators/academic.validator";
+
+function monthRange(month: string) {
+  const start = new Date(`${month}-01T00:00:00.000Z`);
+  const end = new Date(start);
+  end.setMonth(end.getMonth() + 1);
+  return { gte: start, lt: end };
+}
+
+export const incidentService = {
+  async list(schoolId: string, filters: { classId?: string; studentId?: string; month?: string }) {
+    return prisma.incident.findMany({
+      where: {
+        schoolId,
+        studentId: filters.studentId,
+        ...(filters.classId && { student: { classId: filters.classId } }),
+        ...(filters.month && { date: monthRange(filters.month) }),
+      },
+      include: { student: true, subject: true, enteredBy: { select: { email: true } } },
+      orderBy: { date: "desc" },
+    });
+  },
+
+  async create(schoolId: string, enteredByUserId: string, input: CreateIncidentInput) {
+    const student = await prisma.student.findFirst({ where: { id: input.studentId, schoolId } });
+    if (!student) throw ApiError.badRequest("Élève invalide pour cette école");
+
+    if (input.type === "EXPULSION" && input.subjectId) {
+      const subject = await prisma.subject.findFirst({ where: { id: input.subjectId, schoolId } });
+      if (!subject) throw ApiError.badRequest("Matière invalide pour cette école");
+    }
+
+    return prisma.incident.create({
+      data: { schoolId, enteredByUserId, ...input },
+      include: { subject: true },
+    });
+  },
+
+  async update(schoolId: string, id: string, input: Partial<CreateIncidentInput>) {
+    const incident = await prisma.incident.findFirst({ where: { id, schoolId } });
+    if (!incident) throw ApiError.notFound("Incident introuvable");
+    return prisma.incident.update({ where: { id }, data: input });
+  },
+
+  async remove(schoolId: string, id: string) {
+    const incident = await prisma.incident.findFirst({ where: { id, schoolId } });
+    if (!incident) throw ApiError.notFound("Incident introuvable");
+    return prisma.incident.delete({ where: { id } });
+  },
+
+  /** Compte les absences du mois en cours pour un élève (utilisé pour le signal "à risque") */
+  async countAbsencesThisMonth(schoolId: string, studentId: string) {
+    const now = new Date();
+    const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    return prisma.incident.count({
+      where: { schoolId, studentId, type: "ABSENCE", date: monthRange(month) },
+    });
+  },
+};
