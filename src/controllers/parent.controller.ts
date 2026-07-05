@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { asyncHandler } from "../utils/asyncHandler";
 import { parentService } from "../services/parent.service";
+import { linkExistingChildSchema } from "../validators/auth.validator";
 import { ApiError } from "../utils/ApiError";
 
 export const parentController = {
@@ -23,5 +24,12 @@ export const parentController = {
   resetPassword: asyncHandler(async (req: Request, res: Response) => {
     const result = await parentService.resetPassword(req.auth!.schoolId, req.params.id);
     res.json({ success: true, data: result });
+  }),
+
+  linkExistingChild: asyncHandler(async (req: Request, res: Response) => {
+    if (!req.auth) throw ApiError.unauthorized();
+    const { matricule, password } = linkExistingChildSchema.parse(req.body);
+    const child = await parentService.linkExistingChild(req.auth.schoolId, req.auth.userId, matricule, password);
+    res.status(201).json({ success: true, data: child });
   }),
 };

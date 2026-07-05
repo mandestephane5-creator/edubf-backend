@@ -51,5 +51,12 @@ export const changeParentPasswordSchema = z.object({
     .regex(/^[0-9]+$/, "Le mot de passe doit être composé uniquement de chiffres"),
 });
 
+// Ajouter un enfant déjà inscrit à son compte parent (preuve = matricule + mot de passe
+// d'un des parents déjà liés, même niveau de preuve qu'une connexion classique)
+export const linkExistingChildSchema = z.object({
+  matricule: z.string().min(2, "Matricule requis"),
+  password: z.string().min(1, "Mot de passe requis"),
+});
+
 export type RegisterSchoolInput = z.infer<typeof registerSchoolSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;

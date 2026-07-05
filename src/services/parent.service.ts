@@ -1,7 +1,8 @@
 import { prisma } from "../config/db";
 import { ApiError } from "../utils/ApiError";
-import { hashPassword } from "../utils/password";
+import { hashPassword, comparePassword } from "../utils/password";
 import { generatePin } from "../utils/credentials";
+import { env } from "../config/env";
 
 export const parentService = {
   async list(schoolId: string, search?: string) {
@@ -59,5 +60,70 @@ export const parentService = {
       data: { password: hashed, failedLoginAttempts: 0, lockedUntil: null },
     });
     return { newPin };
+  },
+
+  /**
+   * Permet à un parent déjà connecté d'ajouter à son compte un enfant déjà inscrit
+   * (par ex. par un autre parent). Le parent doit prouver qu'il connaît le matricule
+   * ET le mot de passe d'un des parents déjà liés à cet élève — même niveau de preuve
+   * qu'une connexion classique. Protégé contre le brute-force comme le login normal.
+   */
+  async linkExistingChild(schoolId: string, requesterUserId: string, matricule: string, password: string) {
+    const student = await prisma.student.findUnique({
+      where: { schoolId_matricule: { schoolId, matricule } },
+      include: { parents: { include: { parent: { include: { user: true } } } } },
+    });
+    if (!student) throw ApiError.notFound("Aucun élève ne correspond à ce matricule");
+
+    const candidates = student.parents.map((sp) => sp.parent.user);
+    if (candidates.length === 0) {
+      throw ApiError.badRequest("Cet élève n'a encore aucun parent enregistré");
+    }
+
+    for (const candidate of candidates) {
+      if (!candidate.isActive) continue;
+
+      if (candidate.lockedUntil && candidate.lockedUntil > new Date()) {
+        const minutesLeft = Math.ceil((candidate.lockedUntil.getTime() - Date.now()) / 60000);
+        throw ApiError.unauthorized(`Compte temporairement bloqué. Réessayez dans ${minutesLeft} minute(s).`);
+      }
+
+      const validPassword = await comparePassword(password, candidate.password);
+      if (validPassword) {
+        await prisma.user.update({
+          where: { id: candidate.id },
+          data: { failedLoginAttempts: 0, lockedUntil: null },
+        });
+
+        const requesterParent = await prisma.parent.findUnique({ where: { userId: requesterUserId } });
+        if (!requesterParent) throw ApiError.forbidden();
+
+        const alreadyLinked = await prisma.studentParent.findFirst({
+          where: { studentId: student.id, parentId: requesterParent.id },
+        });
+        if (!alreadyLinked) {
+          await prisma.studentParent.create({ data: { studentId: student.id, parentId: requesterParent.id } });
+        }
+
+        return { id: student.id, firstName: student.firstName, lastName: student.lastName };
+      }
+    }
+
+    // Aucun candidat n'a le bon mot de passe : incrémente les échecs (anti brute-force)
+    await Promise.all(
+      candidates.map(async (candidate) => {
+        const attempts = candidate.failedLoginAttempts + 1;
+        const shouldLock = attempts >= env.parentLockout.maxAttempts;
+        await prisma.user.update({
+          where: { id: candidate.id },
+          data: {
+            failedLoginAttempts: attempts,
+            lockedUntil: shouldLock ? new Date(Date.now() + env.parentLockout.minutes * 60000) : null,
+          },
+        });
+      })
+    );
+
+    throw ApiError.unauthorized("Matricule ou mot de passe incorrect");
   },
 };
