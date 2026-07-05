@@ -2,7 +2,7 @@ import { prisma } from "../config/db";
 import { ApiError } from "../utils/ApiError";
 import { hashPassword } from "../utils/password";
 import { generatePin } from "../utils/credentials";
-import { CreateStudentWithParentInput, UpdateStudentInput } from "../validators/student.validator";
+import { CreateStudentWithParentInput, UpdateStudentInput, BulkCreateStudentsInput } from "../validators/student.validator";
 
 async function generateMatricule(schoolId: string): Promise<string> {
   const year = new Date().getFullYear();
@@ -87,7 +87,7 @@ export const studentService = {
         generatedPassword = generatePin();
         const hashed = await hashPassword(generatedPassword);
         const parentUser = await tx.user.create({
-          data: { schoolId, phone: input.parent.phone, password: hashed, role: "PARENT" },
+          data: { schoolId, phone: input.parent.phone, password: hashed, role: "PARENT", mustChangePassword: true },
         });
         const parent = await tx.parent.create({
           data: {
@@ -116,6 +116,72 @@ export const studentService = {
 
       return { student, matricule, parentPassword: generatedPassword };
     });
+  },
+
+  /**
+   * Import en masse : une ligne = un élève + son parent. Traite chaque ligne
+   * indépendamment (une erreur sur une ligne n'empêche pas les autres de passer),
+   * et détecte automatiquement les doublons de téléphone (relie sans demander
+   * de confirmation — acceptable en import de masse, contrairement à la création
+   * unitaire où on demande confirmation à l'écran).
+   */
+  async bulkCreate(schoolId: string, input: BulkCreateStudentsInput) {
+    const classes = await prisma.class.findMany({ where: { schoolId } });
+    const classIdByName = new Map(classes.map((c) => [c.name.trim().toLowerCase(), c.id]));
+
+    const results: Array<{
+      success: boolean;
+      studentName: string;
+      matricule?: string;
+      parentPassword?: string;
+      error?: string;
+    }> = [];
+
+    for (const row of input.rows) {
+      const studentName = `${row.studentFirstName} ${row.studentLastName}`;
+      try {
+        let classId: string | undefined;
+        if (row.className) {
+          classId = classIdByName.get(row.className.trim().toLowerCase());
+          if (!classId) throw new Error(`Classe "${row.className}" introuvable`);
+        }
+
+        const existingUser = await prisma.user.findUnique({
+          where: { schoolId_phone: { schoolId, phone: row.parentPhone } },
+        });
+        let linkToExistingParentId: string | undefined;
+        if (existingUser) {
+          const existingParent = await prisma.parent.findUnique({ where: { userId: existingUser.id } });
+          linkToExistingParentId = existingParent?.id;
+        }
+
+        const result = await this.createWithParent(schoolId, {
+          student: {
+            firstName: row.studentFirstName,
+            lastName: row.studentLastName,
+            birthDate: row.birthDate ? new Date(row.birthDate) : undefined,
+            classId,
+          },
+          parent: {
+            firstName: row.parentFirstName,
+            lastName: row.parentLastName,
+            phone: row.parentPhone,
+          },
+          linkToExistingParentId,
+        });
+
+        results.push({
+          success: true,
+          studentName,
+          matricule: result.matricule,
+          parentPassword: result.parentPassword,
+        });
+      } catch (err: any) {
+        results.push({ success: false, studentName, error: err.message });
+      }
+    }
+
+    return results;
   },
 
   async update(schoolId: string, id: string, input: UpdateStudentInput) {

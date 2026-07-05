@@ -57,18 +57,21 @@ enum NotificationType {
 // ----------------------------------------------------------
 
 model School {
-  id               String   @id @default(uuid())
-  name             String
-  slug             String   @unique
-  address          String?
-  city             String?
-  country          String   @default("Burkina Faso")
-  phone            String?
-  logoUrl          String?
-  publicWebsiteUrl String? // lien vers le site vitrine de l'école, affiché dans l'app mobile
-  isActive         Boolean  @default(true)
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  id                 String   @id @default(uuid())
+  name               String
+  slug               String   @unique
+  address            String?
+  city               String?
+  country            String   @default("Burkina Faso")
+  phone              String?
+  adminPhone         String? // affiché dans l'app mobile — bouton Appeler/WhatsApp
+  surveillancePhone  String? // affiché dans l'app mobile — bouton Appeler/WhatsApp
+  secretariatHours   String? // ex: "Lundi-Vendredi 7h30-16h30"
+  logoUrl            String?
+  publicWebsiteUrl   String? // lien vers le site vitrine de l'école, affiché dans l'app mobile
+  isActive           Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
   users               User[]
   students            Student[]
@@ -81,6 +84,9 @@ model School {
   evaluationSchedules EvaluationSchedule[]
   compositionDates    CompositionDate[]
   notifications       Notification[]
+  announcements       Announcement[]
+  reports             Report[]
+  pushTokens          PushToken[]
 
   @@map("schools")
 }
@@ -100,6 +106,10 @@ model User {
   role     Role
   isActive Boolean @default(true)
 
+  // Force un changement de mot de passe à la prochaine connexion (ex: PIN généré à l'inscription,
+  // ou après une réinitialisation par l'admin) — vrai par défaut pour les nouveaux comptes PARENT.
+  mustChangePassword Boolean @default(false)
+
   // Anti-brute-force
   failedLoginAttempts Int       @default(0)
   lockedUntil         DateTime?
@@ -114,6 +124,8 @@ model User {
   passwordResetTokens  PasswordResetToken[]
   gradesEntered        Grade[]               @relation("GradeEnteredBy")
   incidentsEntered     Incident[]            @relation("IncidentEnteredBy")
+  reports              Report[]
+  pushTokens           PushToken[]
 
   @@unique([schoolId, email])
   @@unique([schoolId, phone])
@@ -405,4 +417,59 @@ model Notification {
   @@index([schoolId])
   @@index([userId, isRead])
   @@map("notifications")
+}
+
+// ----------------------------------------------------------
+// ANNONCES (actualités de l'école, visibles par tous les parents)
+// ----------------------------------------------------------
+
+model Announcement {
+  id       String @id @default(uuid())
+  schoolId String
+  school   School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  title    String
+  message  String
+
+  createdAt DateTime @default(now())
+
+  @@index([schoolId])
+  @@map("announcements")
+}
+
+// ----------------------------------------------------------
+// SIGNALEMENTS (un parent signale un problème/une erreur)
+// ----------------------------------------------------------
+
+model Report {
+  id       String @id @default(uuid())
+  schoolId String
+  school   School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  userId   String
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  message  String
+  resolved Boolean @default(false)
+
+  createdAt DateTime @default(now())
+
+  @@index([schoolId])
+  @@map("reports")
+}
+
+// ----------------------------------------------------------
+// JETONS DE NOTIFICATIONS PUSH (Expo)
+// ----------------------------------------------------------
+
+model PushToken {
+  id       String @id @default(uuid())
+  schoolId String
+  school   School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  userId   String
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token    String @unique
+
+  createdAt DateTime @default(now())
+
+  @@index([schoolId])
+  @@index([userId])
+  @@map("push_tokens")
 }

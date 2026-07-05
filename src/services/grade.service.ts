@@ -76,6 +76,18 @@ export const gradeService = {
     results.sort((a, b) => b.average - a.average);
     return results.map((r, index) => ({ ...r, rank: index + 1 }));
   },
+
+  /**
+   * Moyenne globale de la classe uniquement (pas de détail par élève) — c'est la seule
+   * version accessible aux parents, pour comparer sans exposer les notes des autres enfants.
+   */
+  async computeClassAverageOnly(schoolId: string, classId: string, term: string, academicYear: string) {
+    const ranking = await this.computeClassRanking(schoolId, classId, term, academicYear);
+    const withGrades = ranking.filter((r) => r.average > 0);
+    if (withGrades.length === 0) return { average: 0, studentCount: ranking.length };
+    const avg = withGrades.reduce((sum, r) => sum + r.average, 0) / withGrades.length;
+    return { average: round2(avg), studentCount: ranking.length };
+  },
 };
 
 function round2(n: number): number {

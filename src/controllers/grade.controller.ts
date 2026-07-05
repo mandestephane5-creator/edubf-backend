@@ -72,4 +72,15 @@ export const gradeController = {
     );
     res.json({ success: true, data: result });
   }),
+
+  classAverageOnly: asyncHandler(async (req: Request, res: Response) => {
+    const { term, academicYear } = req.query;
+    const result = await gradeService.computeClassAverageOnly(
+      req.auth!.schoolId,
+      req.params.classId,
+      term as string,
+      academicYear as string
+    );
+    res.json({ success: true, data: result });
+  }),
 };

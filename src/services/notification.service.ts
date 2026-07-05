@@ -1,6 +1,7 @@
 import { NotificationType } from "@prisma/client";
 import { prisma } from "../config/db";
 import { ApiError } from "../utils/ApiError";
+import { sendPushToUsers } from "../utils/pushNotifications";
 
 export const notificationService = {
   async listForUser(schoolId: string, userId: string, unreadOnly?: boolean) {
@@ -11,7 +12,9 @@ export const notificationService = {
   },
 
   async create(schoolId: string, userId: string, type: NotificationType, title: string, message: string) {
-    return prisma.notification.create({ data: { schoolId, userId, type, title, message } });
+    const notif = await prisma.notification.create({ data: { schoolId, userId, type, title, message } });
+    await sendPushToUsers([userId], title, message);
+    return notif;
   },
 
   /** Envoie une notification à tous les parents liés à un élève donné */
@@ -21,9 +24,18 @@ export const notificationService = {
       include: { parent: { include: { user: true } } },
     });
     if (links.length === 0) return;
+    const userIds = links.map((l) => l.parent.user.id);
     await prisma.notification.createMany({
-      data: links.map((l) => ({ schoolId, userId: l.parent.user.id, type, title, message })),
+      data: userIds.map((userId) => ({ schoolId, userId, type, title, message })),
     });
+    await sendPushToUsers(userIds, title, message);
+  },
+
+  /** Envoie une notification à une liste d'utilisateurs (ex: tous les parents pour une annonce) */
+  async broadcastToUsers(schoolId: string, userIds: string[], type: NotificationType, title: string, message: string) {
+    if (userIds.length === 0) return;
+    await prisma.notification.createMany({ data: userIds.map((userId) => ({ schoolId, userId, type, title, message })) });
+    await sendPushToUsers(userIds, title, message);
   },
 
   async markAsRead(schoolId: string, userId: string, id: string) {

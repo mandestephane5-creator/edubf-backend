@@ -11,7 +11,19 @@ export const schoolService = {
     return school;
   },
 
-  async updateSettings(schoolId: string, input: { name?: string; city?: string; phone?: string; publicWebsiteUrl?: string }) {
+  async updateSettings(
+    schoolId: string,
+    input: {
+      name?: string;
+      city?: string;
+      phone?: string;
+      adminPhone?: string;
+      surveillancePhone?: string;
+      secretariatHours?: string;
+      address?: string;
+      publicWebsiteUrl?: string;
+    }
+  ) {
     return prisma.school.update({ where: { id: schoolId }, data: input });
   },
 

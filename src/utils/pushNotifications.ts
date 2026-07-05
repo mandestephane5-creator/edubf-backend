@@ -1,0 +1,33 @@
+import { prisma } from "../config/db";
+
+const EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send";
+
+/**
+ * Envoie une notification push à un ou plusieurs utilisateurs, via tous leurs jetons
+ * Expo enregistrés (un utilisateur peut avoir plusieurs appareils). Échoue silencieusement
+ * en cas de problème réseau — la notification "interne" (table Notification) reste
+ * toujours créée séparément, le push n'est qu'un bonus best-effort.
+ */
+export async function sendPushToUsers(userIds: string[], title: string, body: string) {
+  if (userIds.length === 0) return;
+
+  try {
+    const tokens = await prisma.pushToken.findMany({ where: { userId: { in: userIds } } });
+    if (tokens.length === 0) return;
+
+    const messages = tokens.map((t) => ({
+      to: t.token,
+      sound: "default",
+      title,
+      body,
+    }));
+
+    await fetch(EXPO_PUSH_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify(messages),
+    });
+  } catch (err) {
+    console.error("[EduBF] Échec envoi notification push (non bloquant):", err);
+  }
+}

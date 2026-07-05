@@ -32,9 +32,29 @@ export const updateSchoolSettingsSchema = z.object({
   name: z.string().min(1).optional(),
   city: z.string().optional(),
   phone: z.string().optional(),
+  adminPhone: z.string().optional(),
+  surveillancePhone: z.string().optional(),
+  secretariatHours: z.string().optional(),
+  address: z.string().optional(),
   publicWebsiteUrl: z.string().url().optional().or(z.literal("")),
 });
 
 export type CreateSurveillantInput = z.infer<typeof createSurveillantSchema>;
 export type CreateClassInput = z.infer<typeof createClassSchema>;
 export type CreateSubjectInput = z.infer<typeof createSubjectSchema>;
+
+// ---- Annonces (actualités de l'école) ----
+export const createAnnouncementSchema = z.object({
+  title: z.string().min(1),
+  message: z.string().min(1),
+});
+
+// ---- Signalements ----
+export const createReportSchema = z.object({
+  message: z.string().min(3, "Décris le problème (3 caractères minimum)"),
+});
+
+// ---- Jetons de notifications push ----
+export const registerPushTokenSchema = z.object({
+  token: z.string().min(5),
+});

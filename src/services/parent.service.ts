@@ -57,7 +57,7 @@ export const parentService = {
     const hashed = await hashPassword(newPin);
     await prisma.user.update({
       where: { id: parent.userId },
-      data: { password: hashed, failedLoginAttempts: 0, lockedUntil: null },
+      data: { password: hashed, failedLoginAttempts: 0, lockedUntil: null, mustChangePassword: true },
     });
     return { newPin };
   },

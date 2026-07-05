@@ -2,7 +2,11 @@ import { Request, Response } from "express";
 import { asyncHandler } from "../utils/asyncHandler";
 import { studentService } from "../services/student.service";
 import { parentService } from "../services/parent.service";
-import { createStudentWithParentSchema, updateStudentSchema } from "../validators/student.validator";
+import {
+  createStudentWithParentSchema,
+  updateStudentSchema,
+  bulkCreateStudentsSchema,
+} from "../validators/student.validator";
 import { ApiError } from "../utils/ApiError";
 
 export const studentController = {
@@ -41,6 +45,12 @@ export const studentController = {
       }
       throw err;
     }
+  }),
+
+  bulkCreate: asyncHandler(async (req: Request, res: Response) => {
+    const input = bulkCreateStudentsSchema.parse(req.body);
+    const results = await studentService.bulkCreate(req.auth!.schoolId, input);
+    res.status(201).json({ success: true, data: results });
   }),
 
   update: asyncHandler(async (req: Request, res: Response) => {
