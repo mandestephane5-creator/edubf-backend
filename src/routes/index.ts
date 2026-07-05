@@ -13,6 +13,11 @@ import miscRoutes from "./misc.routes";
 
 const router = Router();
 
+// Doit être déclarée AVANT les routes protégées (sinon interceptée par l'authentification)
+router.get("/health", (_req, res) => {
+  res.json({ success: true, message: "EduBF API opérationnelle", timestamp: new Date().toISOString() });
+});
+
 router.use("/auth", authRoutes);
 router.use("/students", studentRoutes);
 router.use("/parents", parentRoutes);
@@ -24,9 +29,5 @@ router.use("/timetable", timetableRoutes);
 router.use("/evaluations", evaluationRoutes);
 router.use("/notifications", notificationRoutes);
 router.use("/", miscRoutes);
-
-router.get("/health", (_req, res) => {
-  res.json({ success: true, message: "EduBF API opérationnelle", timestamp: new Date().toISOString() });
-});
 
 export default router;
