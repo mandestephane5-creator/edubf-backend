@@ -2,3 +2,7 @@ node_modules/
 dist/
 .env
 storage/
+
+# ⚠️ NE JAMAIS ajouter prisma/migrations/ ici — ce dossier DOIT être versionné sur Git.
+# Sans lui, Prisma ne peut pas savoir quelles migrations existent déjà, et propose de
+# réinitialiser (= supprimer) la base de données au moindre "drift" détecté.
