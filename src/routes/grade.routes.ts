@@ -31,4 +31,6 @@ router.get(
   gradeController.classAverageOnly
 );
 
+router.get("/audit-log", authorize("ADMIN", "SURVEILLANT"), gradeController.auditLog);
+
 export default router;

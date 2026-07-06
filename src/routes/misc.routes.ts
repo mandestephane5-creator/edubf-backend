@@ -45,6 +45,7 @@ router.delete("/announcements/:id", authorize("ADMIN", "SURVEILLANT"), validateI
 
 // Signalements — créés par les parents, consultés par admin/surveillant
 router.post("/reports", authorize("PARENT"), reportController.create);
+router.get("/reports/me", authorize("PARENT"), reportController.listMine);
 router.get("/reports", authorize("ADMIN", "SURVEILLANT"), reportController.list);
 router.put("/reports/:id/resolve", authorize("ADMIN", "SURVEILLANT"), validateIdParam, reportController.markResolved);
 

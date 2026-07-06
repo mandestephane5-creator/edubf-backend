@@ -20,5 +20,6 @@ router.delete(
   validateParams({ id: z.string().uuid(), subjectId: z.string().uuid() }),
   classController.removeSubject
 );
+router.get("/:id/stats", authorize("ADMIN", "SURVEILLANT"), validateIdParam, classController.stats);
 
 export default router;

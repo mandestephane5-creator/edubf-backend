@@ -1,6 +1,7 @@
 import { prisma } from "../config/db";
 import { ApiError } from "../utils/ApiError";
 import { CreateClassInput } from "../validators/misc.validator";
+import { gradeService } from "./grade.service";
 
 export const classService = {
   async list(schoolId: string, academicYear?: string) {
@@ -48,5 +49,34 @@ export const classService = {
   async removeSubject(schoolId: string, classId: string, subjectId: string) {
     await this.getById(schoolId, classId);
     return prisma.classSubject.delete({ where: { classId_subjectId: { classId, subjectId } } });
+  },
+
+  /**
+   * Statistiques agrégées d'une classe : moyenne générale (pondérée), nombre
+   * d'incidents ce mois-ci, effectif — pour un coup d'œil rapide côté admin.
+   */
+  async getStats(schoolId: string, classId: string, term: string, academicYear: string) {
+    await this.getById(schoolId, classId);
+
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+
+    const [studentCount, incidentCount, ranking] = await Promise.all([
+      prisma.student.count({ where: { schoolId, classId } }),
+      prisma.incident.count({
+        where: { schoolId, student: { classId }, date: { gte: monthStart, lt: monthEnd } },
+      }),
+      gradeService.computeClassRanking(schoolId, classId, term, academicYear),
+    ]);
+
+    const withGrades = ranking.filter((r) => r.average > 0);
+    const average = withGrades.length > 0 ? withGrades.reduce((sum, r) => sum + r.average, 0) / withGrades.length : 0;
+
+    return {
+      studentCount,
+      incidentCountThisMonth: incidentCount,
+      average: Math.round(average * 100) / 100,
+    };
   },
 };

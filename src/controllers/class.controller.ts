@@ -41,4 +41,10 @@ export const classController = {
     await classService.removeSubject(req.auth!.schoolId, req.params.id, req.params.subjectId);
     res.status(204).send();
   }),
+
+  stats: asyncHandler(async (req: Request, res: Response) => {
+    const { term, academicYear } = req.query;
+    const stats = await classService.getStats(req.auth!.schoolId, req.params.id, term as string, academicYear as string);
+    res.json({ success: true, data: stats });
+  }),
 };

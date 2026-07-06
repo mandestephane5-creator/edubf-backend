@@ -41,13 +41,18 @@ export const gradeController = {
 
   update: asyncHandler(async (req: Request, res: Response) => {
     const input = updateGradeSchema.parse(req.body);
-    const grade = await gradeService.update(req.auth!.schoolId, req.params.id, input);
+    const grade = await gradeService.update(req.auth!.schoolId, req.params.id, req.auth!.userId, input);
     res.json({ success: true, data: grade });
   }),
 
   remove: asyncHandler(async (req: Request, res: Response) => {
-    await gradeService.remove(req.auth!.schoolId, req.params.id);
+    await gradeService.remove(req.auth!.schoolId, req.params.id, req.auth!.userId);
     res.status(204).send();
+  }),
+
+  auditLog: asyncHandler(async (req: Request, res: Response) => {
+    const logs = await gradeService.listAuditLog(req.auth!.schoolId);
+    res.json({ success: true, data: logs });
   }),
 
   studentAverage: asyncHandler(async (req: Request, res: Response) => {

@@ -11,9 +11,9 @@ export const notificationService = {
     });
   },
 
-  async create(schoolId: string, userId: string, type: NotificationType, title: string, message: string) {
-    const notif = await prisma.notification.create({ data: { schoolId, userId, type, title, message } });
-    await sendPushToUsers([userId], title, message);
+  async create(schoolId: string, userId: string, type: NotificationType, title: string, message: string, studentId?: string) {
+    const notif = await prisma.notification.create({ data: { schoolId, userId, type, title, message, studentId } });
+    await sendPushToUsers([userId], title, message, studentId ? { studentId } : undefined);
     return notif;
   },
 
@@ -26,9 +26,9 @@ export const notificationService = {
     if (links.length === 0) return;
     const userIds = links.map((l) => l.parent.user.id);
     await prisma.notification.createMany({
-      data: userIds.map((userId) => ({ schoolId, userId, type, title, message })),
+      data: userIds.map((userId) => ({ schoolId, userId, type, title, message, studentId })),
     });
-    await sendPushToUsers(userIds, title, message);
+    await sendPushToUsers(userIds, title, message, { studentId });
   },
 
   /** Envoie une notification à une liste d'utilisateurs (ex: tous les parents pour une annonce) */

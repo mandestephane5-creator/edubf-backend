@@ -56,13 +56,13 @@ export const studentService = {
    * Si `linkToExistingParentId` est fourni, relie l'élève à ce parent existant
    * (après confirmation) au lieu de créer un nouveau compte.
    */
-  async createWithParent(schoolId: string, input: CreateStudentWithParentInput) {
+  async createWithParent(schoolId: string, input: CreateStudentWithParentInput, precomputedMatricule?: string) {
     if (input.student.classId) {
       const classExists = await prisma.class.findFirst({ where: { id: input.student.classId, schoolId } });
       if (!classExists) throw ApiError.badRequest("Classe invalide pour cette école");
     }
 
-    const matricule = await generateMatricule(schoolId);
+    const matricule = precomputedMatricule ?? (await generateMatricule(schoolId));
 
     return prisma.$transaction(async (tx) => {
       let parentId: string;
@@ -125,60 +125,87 @@ export const studentService = {
    * de confirmation — acceptable en import de masse, contrairement à la création
    * unitaire où on demande confirmation à l'écran).
    */
+  /**
+   * Import en masse : une ligne = un élève + son parent. Traite les lignes par petits
+   * groupes en parallèle (plus rapide qu'une par une), sans risque de collision de
+   * matricule : les matricules sont calculés à l'avance en une seule fois, plutôt que
+   * recalculés à la volée pendant des écritures concurrentes.
+   */
   async bulkCreate(schoolId: string, input: BulkCreateStudentsInput) {
     const classes = await prisma.class.findMany({ where: { schoolId } });
     const classIdByName = new Map(classes.map((c) => [c.name.trim().toLowerCase(), c.id]));
+
+    const year = new Date().getFullYear();
+    const startingCount = await prisma.student.count({ where: { schoolId } });
 
     const results: Array<{
       success: boolean;
       studentName: string;
       matricule?: string;
       parentPassword?: string;
+      parentPhone?: string;
       error?: string;
     }> = [];
 
-    for (const row of input.rows) {
-      const studentName = `${row.studentFirstName} ${row.studentLastName}`;
-      try {
-        let classId: string | undefined;
-        if (row.className) {
-          classId = classIdByName.get(row.className.trim().toLowerCase());
-          if (!classId) throw new Error(`Classe "${row.className}" introuvable`);
-        }
+    const BATCH_SIZE = 5;
+    for (let batchStart = 0; batchStart < input.rows.length; batchStart += BATCH_SIZE) {
+      const batch = input.rows.slice(batchStart, batchStart + BATCH_SIZE);
 
-        const existingUser = await prisma.user.findUnique({
-          where: { schoolId_phone: { schoolId, phone: row.parentPhone } },
-        });
-        let linkToExistingParentId: string | undefined;
-        if (existingUser) {
-          const existingParent = await prisma.parent.findUnique({ where: { userId: existingUser.id } });
-          linkToExistingParentId = existingParent?.id;
-        }
+      const batchResults = await Promise.all(
+        batch.map(async (row, indexInBatch) => {
+          const rowIndex = batchStart + indexInBatch;
+          const studentName = `${row.studentFirstName} ${row.studentLastName}`;
+          const matricule = `EDU-${year}-${String(startingCount + rowIndex + 1).padStart(6, "0")}`;
 
-        const result = await this.createWithParent(schoolId, {
-          student: {
-            firstName: row.studentFirstName,
-            lastName: row.studentLastName,
-            birthDate: row.birthDate ? new Date(row.birthDate) : undefined,
-            classId,
-          },
-          parent: {
-            firstName: row.parentFirstName,
-            lastName: row.parentLastName,
-            phone: row.parentPhone,
-          },
-          linkToExistingParentId,
-        });
+          try {
+            let classId: string | undefined;
+            if (row.className) {
+              classId = classIdByName.get(row.className.trim().toLowerCase());
+              if (!classId) throw new Error(`Classe "${row.className}" introuvable`);
+            }
 
-        results.push({
-          success: true,
-          studentName,
-          matricule: result.matricule,
-          parentPassword: result.parentPassword,
-        });
-      } catch (err: any) {
-        results.push({ success: false, studentName, error: err.message });
-      }
+            const existingUser = await prisma.user.findUnique({
+              where: { schoolId_phone: { schoolId, phone: row.parentPhone } },
+            });
+            let linkToExistingParentId: string | undefined;
+            if (existingUser) {
+              const existingParent = await prisma.parent.findUnique({ where: { userId: existingUser.id } });
+              linkToExistingParentId = existingParent?.id;
+            }
+
+            const result = await this.createWithParent(
+              schoolId,
+              {
+                student: {
+                  firstName: row.studentFirstName,
+                  lastName: row.studentLastName,
+                  birthDate: row.birthDate ? new Date(row.birthDate) : undefined,
+                  classId,
+                },
+                parent: {
+                  firstName: row.parentFirstName,
+                  lastName: row.parentLastName,
+                  phone: row.parentPhone,
+                },
+                linkToExistingParentId,
+              },
+              matricule
+            );
+
+            return {
+              success: true,
+              studentName,
+              matricule: result.matricule,
+              parentPassword: result.parentPassword,
+              parentPhone: row.parentPhone,
+            };
+          } catch (err: any) {
+            return { success: false, studentName, error: err.message };
+          }
+        })
+      );
+
+      results.push(...batchResults);
     }
 
     return results;

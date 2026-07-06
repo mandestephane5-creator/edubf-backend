@@ -186,6 +186,9 @@ export const authService = {
     const valid = await comparePassword(currentPassword, user.password);
     if (!valid) throw ApiError.unauthorized("Mot de passe actuel incorrect");
     const hashed = await hashPassword(newPassword);
-    await prisma.user.update({ where: { id: userId }, data: { password: hashed, mustChangePassword: false } });
+    await prisma.user.update({
+      where: { id: userId },
+      data: { password: hashed, mustChangePassword: false, passwordChangedAt: new Date() },
+    });
   },
 };

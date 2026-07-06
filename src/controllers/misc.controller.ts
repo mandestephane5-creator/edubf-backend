@@ -120,6 +120,12 @@ export const reportController = {
     res.status(201).json({ success: true, data: report });
   }),
 
+  listMine: asyncHandler(async (req: Request, res: Response) => {
+    if (!req.auth) throw ApiError.unauthorized();
+    const reports = await reportService.listMine(req.auth.userId);
+    res.json({ success: true, data: reports });
+  }),
+
   list: asyncHandler(async (req: Request, res: Response) => {
     const reports = await reportService.list(req.auth!.schoolId);
     res.json({ success: true, data: reports });

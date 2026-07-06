@@ -23,16 +23,58 @@ export const gradeService = {
     });
   },
 
-  async update(schoolId: string, id: string, input: Partial<CreateGradeInput>) {
-    const grade = await prisma.grade.findFirst({ where: { id, schoolId } });
+  async update(schoolId: string, id: string, performedByUserId: string, input: Partial<CreateGradeInput>) {
+    const grade = await prisma.grade.findFirst({ where: { id, schoolId }, include: { student: true, subject: true } });
     if (!grade) throw ApiError.notFound("Note introuvable");
-    return prisma.grade.update({ where: { id }, data: input });
+
+    const updated = await prisma.grade.update({ where: { id }, data: input });
+
+    if (input.value !== undefined && input.value !== grade.value) {
+      await prisma.gradeAuditLog.create({
+        data: {
+          schoolId,
+          gradeId: id,
+          studentName: `${grade.student.firstName} ${grade.student.lastName}`,
+          subjectName: grade.subject.name,
+          action: "updated",
+          oldValue: grade.value,
+          newValue: input.value,
+          performedByUserId,
+        },
+      });
+    }
+
+    return updated;
   },
 
-  async remove(schoolId: string, id: string) {
-    const grade = await prisma.grade.findFirst({ where: { id, schoolId } });
+  async remove(schoolId: string, id: string, performedByUserId: string) {
+    const grade = await prisma.grade.findFirst({ where: { id, schoolId }, include: { student: true, subject: true } });
     if (!grade) throw ApiError.notFound("Note introuvable");
+
+    await prisma.gradeAuditLog.create({
+      data: {
+        schoolId,
+        gradeId: id,
+        studentName: `${grade.student.firstName} ${grade.student.lastName}`,
+        subjectName: grade.subject.name,
+        action: "deleted",
+        oldValue: grade.value,
+        newValue: null,
+        performedByUserId,
+      },
+    });
+
     return prisma.grade.delete({ where: { id } });
+  },
+
+  /** Historique des modifications/suppressions de notes — traçabilité pour l'admin */
+  async listAuditLog(schoolId: string, limit = 100) {
+    return prisma.gradeAuditLog.findMany({
+      where: { schoolId },
+      include: { performedBy: { select: { email: true } } },
+      orderBy: { createdAt: "desc" },
+      take: limit,
+    });
   },
 
   /** Moyenne générale pondérée d'un élève pour un trimestre donné */
@@ -78,8 +120,9 @@ export const gradeService = {
   },
 
   /**
-   * Moyenne globale de la classe uniquement (pas de détail par élève) — c'est la seule
-   * version accessible aux parents, pour comparer sans exposer les notes des autres enfants.
+   * Statistiques agrégées d'une classe : moyenne générale, nombre d'incidents ce
+   * mois-ci, effectif — pour un coup d'œil rapide côté admin, sans naviguer entre
+   * plusieurs pages.
    */
   async computeClassAverageOnly(schoolId: string, classId: string, term: string, academicYear: string) {
     const ranking = await this.computeClassRanking(schoolId, classId, term, academicYear);

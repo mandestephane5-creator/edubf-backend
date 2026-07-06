@@ -7,8 +7,12 @@ const EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send";
  * Expo enregistrés (un utilisateur peut avoir plusieurs appareils). Échoue silencieusement
  * en cas de problème réseau — la notification "interne" (table Notification) reste
  * toujours créée séparément, le push n'est qu'un bonus best-effort.
+ *
+ * `data` (ex: { studentId }) est inclus dans la notification pour que l'app puisse
+ * naviguer directement vers le bon écran quand l'utilisateur tape dessus, même si
+ * l'app était fermée.
  */
-export async function sendPushToUsers(userIds: string[], title: string, body: string) {
+export async function sendPushToUsers(userIds: string[], title: string, body: string, data?: Record<string, string>) {
   if (userIds.length === 0) return;
 
   try {
@@ -20,6 +24,7 @@ export async function sendPushToUsers(userIds: string[], title: string, body: st
       sound: "default",
       title,
       body,
+      ...(data && { data }),
     }));
 
     await fetch(EXPO_PUSH_URL, {

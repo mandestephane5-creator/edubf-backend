@@ -87,6 +87,7 @@ model School {
   announcements       Announcement[]
   reports             Report[]
   pushTokens          PushToken[]
+  gradeAuditLogs      GradeAuditLog[]
 
   @@map("schools")
 }
@@ -109,6 +110,7 @@ model User {
   // Force un changement de mot de passe à la prochaine connexion (ex: PIN généré à l'inscription,
   // ou après une réinitialisation par l'admin) — vrai par défaut pour les nouveaux comptes PARENT.
   mustChangePassword Boolean @default(false)
+  passwordChangedAt  DateTime? // dernière fois que le mot de passe a été changé/réinitialisé
 
   // Anti-brute-force
   failedLoginAttempts Int       @default(0)
@@ -126,6 +128,7 @@ model User {
   incidentsEntered     Incident[]            @relation("IncidentEnteredBy")
   reports              Report[]
   pushTokens           PushToken[]
+  gradeAuditLogs       GradeAuditLog[]
 
   @@unique([schoolId, email])
   @@unique([schoolId, phone])
@@ -166,6 +169,7 @@ model Student {
   parents   StudentParent[]
   grades    Grade[]
   incidents Incident[]
+  notifications Notification[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -390,6 +394,7 @@ model CompositionDate {
   term         Term
   academicYear String
   label        String?
+  reminderSent Boolean  @default(false) // évite d'envoyer le rappel "dans 2 jours" plusieurs fois
 
   createdAt DateTime @default(now())
 
@@ -411,6 +416,11 @@ model Notification {
   title    String
   message  String
   isRead   Boolean          @default(false)
+
+  // Élève concerné (note, incident, évaluation) — absent pour les annonces générales de l'école.
+  // Permet à l'app mobile de naviguer directement vers la fiche du bon enfant.
+  studentId String?
+  student   Student? @relation(fields: [studentId], references: [id], onDelete: Cascade)
 
   createdAt DateTime @default(now())
 
@@ -472,4 +482,30 @@ model PushToken {
   @@index([schoolId])
   @@index([userId])
   @@map("push_tokens")
+}
+
+// ----------------------------------------------------------
+// HISTORIQUE DES MODIFICATIONS DE NOTES (qui a modifié/supprimé, quand, ancienne/nouvelle valeur)
+// Pas de relation stricte vers Grade : une note supprimée doit garder son historique.
+// ----------------------------------------------------------
+
+model GradeAuditLog {
+  id          String @id @default(uuid())
+  schoolId    String
+  school      School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  gradeId     String
+  studentName String
+  subjectName String
+  action      String // "updated" | "deleted"
+  oldValue    Float?
+  newValue    Float?
+
+  performedByUserId String
+  performedBy       User   @relation(fields: [performedByUserId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([schoolId])
+  @@index([gradeId])
+  @@map("grade_audit_logs")
 }

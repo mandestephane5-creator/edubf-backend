@@ -13,6 +13,7 @@ export const parentService = {
           OR: [
             { firstName: { contains: search, mode: "insensitive" } },
             { lastName: { contains: search, mode: "insensitive" } },
+            { user: { phone: { contains: search, mode: "insensitive" } } },
           ],
         }),
       },
@@ -57,7 +58,7 @@ export const parentService = {
     const hashed = await hashPassword(newPin);
     await prisma.user.update({
       where: { id: parent.userId },
-      data: { password: hashed, failedLoginAttempts: 0, lockedUntil: null, mustChangePassword: true },
+      data: { password: hashed, failedLoginAttempts: 0, lockedUntil: null, mustChangePassword: true, passwordChangedAt: new Date() },
     });
     return { newPin };
   },
