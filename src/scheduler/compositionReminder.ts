@@ -38,7 +38,7 @@ async function checkUpcomingCompositions() {
       await prisma.compositionDate.update({ where: { id: composition.id }, data: { reminderSent: true } });
     }
   } catch (err) {
-    console.error("[Orivex] Erreur lors de la vérification des rappels de composition:", err);
+    console.error("[Vorelix] Erreur lors de la vérification des rappels de composition:", err);
   }
 }
 

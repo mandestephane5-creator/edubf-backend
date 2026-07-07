@@ -48,7 +48,7 @@ export function errorMiddleware(err: unknown, req: Request, res: Response, _next
   }
 
   // Erreur inconnue
-  console.error("[Orivex] Erreur non gérée:", err);
+  console.error("[Vorelix] Erreur non gérée:", err);
   return res.status(500).json({
     success: false,
     message: "Erreur interne du serveur",

@@ -4,7 +4,7 @@ import bcrypt from "bcryptjs";
 const prisma = new PrismaClient();
 
 async function main() {
-  console.log("🌱 Seed Orivex: création de l'école Sainte Marie...");
+  console.log("🌱 Seed Vorelix: création de l'école Sainte Marie...");
 
   const adminPassword = await bcrypt.hash("SainteMarie2026!", 10);
 

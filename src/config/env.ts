@@ -34,6 +34,6 @@ export const env = {
 
   resend: {
     apiKey: process.env.RESEND_API_KEY ?? "",
-    emailFrom: process.env.EMAIL_FROM ?? "Orivex <no-reply@orivex.app>",
+    emailFrom: process.env.EMAIL_FROM ?? "Vorelix <no-reply@vorelix.app>",
   },
 };
