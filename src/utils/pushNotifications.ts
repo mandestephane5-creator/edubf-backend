@@ -33,6 +33,6 @@ export async function sendPushToUsers(userIds: string[], title: string, body: st
       body: JSON.stringify(messages),
     });
   } catch (err) {
-    console.error("[EduBF] Échec envoi notification push (non bloquant):", err);
+    console.error("[Orivex] Échec envoi notification push (non bloquant):", err);
   }
 }

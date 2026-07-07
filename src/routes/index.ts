@@ -16,7 +16,7 @@ const router = Router();
 // Doit être déclarée AVANT les routes protégées (miscRoutes exige une authentification
 // sur tout ce qui est monté sous "/", ce qui interceptait /health par erreur)
 router.get("/health", (_req, res) => {
-  res.json({ success: true, message: "EduBF API opérationnelle", timestamp: new Date().toISOString() });
+  res.json({ success: true, message: "Orivex API opérationnelle", timestamp: new Date().toISOString() });
 });
 
 router.use("/auth", authRoutes);

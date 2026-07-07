@@ -10,17 +10,17 @@ const resend = env.resend.apiKey ? new Resend(env.resend.apiKey) : null;
  */
 export async function sendPasswordResetEmail(to: string, resetLink: string) {
   if (!resend) {
-    console.log(`[EduBF] (Resend non configuré) Lien de réinitialisation pour ${to} : ${resetLink}`);
+    console.log(`[Orivex] (Resend non configuré) Lien de réinitialisation pour ${to} : ${resetLink}`);
     return;
   }
 
   await resend.emails.send({
     from: env.resend.emailFrom,
     to,
-    subject: "Réinitialisation de votre mot de passe EduBF",
+    subject: "Réinitialisation de votre mot de passe Orivex",
     html: `
       <p>Bonjour,</p>
-      <p>Une demande de réinitialisation de mot de passe a été effectuée pour votre compte EduBF.</p>
+      <p>Une demande de réinitialisation de mot de passe a été effectuée pour votre compte Orivex.</p>
       <p><a href="${resetLink}">Cliquez ici pour choisir un nouveau mot de passe</a></p>
       <p>Ce lien expire dans 1 heure. Si vous n'êtes pas à l'origine de cette demande, ignorez cet email.</p>
     `,

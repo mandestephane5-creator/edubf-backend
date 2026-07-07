@@ -6,12 +6,12 @@ import { startCompositionReminderScheduler } from "./scheduler/compositionRemind
 const app = createApp();
 
 const server = app.listen(env.port, () => {
-  console.log(`🚀 EduBF API démarrée sur http://localhost:${env.port} (env: ${env.nodeEnv})`);
+  console.log(`🚀 Orivex API démarrée sur http://localhost:${env.port} (env: ${env.nodeEnv})`);
   startCompositionReminderScheduler();
 });
 
 async function shutdown(signal: string) {
-  console.log(`\n${signal} reçu, arrêt propre du serveur EduBF...`);
+  console.log(`\n${signal} reçu, arrêt propre du serveur Orivex...`);
   server.close(async () => {
     await prisma.$disconnect();
     process.exit(0);

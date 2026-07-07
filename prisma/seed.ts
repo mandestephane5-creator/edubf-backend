@@ -4,7 +4,7 @@ import bcrypt from "bcryptjs";
 const prisma = new PrismaClient();
 
 async function main() {
-  console.log("🌱 Seed EduBF: création de l'école Sainte Marie...");
+  console.log("🌱 Seed Orivex: création de l'école Sainte Marie...");
 
   const adminPassword = await bcrypt.hash("SainteMarie2026!", 10);
 
@@ -15,6 +15,10 @@ async function main() {
       city: "Ouagadougou",
       country: "Burkina Faso",
       phone: "+226 70 00 00 00",
+      adminPhone: "+226 70 00 00 01",
+      surveillancePhone: "+226 70 00 00 02",
+      secretariatHours: "Lundi-Vendredi, 7h30-16h30",
+      address: "Secteur 15, Ouagadougou, Burkina Faso",
       users: {
         create: { email: "directrice@saintemarie.bf", password: adminPassword, role: "ADMIN" },
       },
