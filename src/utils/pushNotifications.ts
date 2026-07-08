@@ -17,7 +17,11 @@ export async function sendPushToUsers(userIds: string[], title: string, body: st
 
   try {
     const tokens = await prisma.pushToken.findMany({ where: { userId: { in: userIds } } });
-    if (tokens.length === 0) return;
+    console.log(`[Vorelix Push] ${tokens.length} jeton(s) trouvé(s) pour ${userIds.length} utilisateur(s) ciblé(s).`);
+    if (tokens.length === 0) {
+      console.warn("[Vorelix Push] Aucun jeton enregistré pour ces utilisateurs — le push ne sera pas envoyé.");
+      return;
+    }
 
     const messages = tokens.map((t) => ({
       to: t.token,
@@ -27,11 +31,13 @@ export async function sendPushToUsers(userIds: string[], title: string, body: st
       ...(data && { data }),
     }));
 
-    await fetch(EXPO_PUSH_URL, {
+    const res = await fetch(EXPO_PUSH_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: "application/json" },
       body: JSON.stringify(messages),
     });
+    const result = await res.json();
+    console.log("[Vorelix Push] Réponse de l'API Expo:", JSON.stringify(result));
   } catch (err) {
     console.error("[Vorelix] Échec envoi notification push (non bloquant):", err);
   }
