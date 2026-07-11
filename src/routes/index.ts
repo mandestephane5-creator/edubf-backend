@@ -10,6 +10,12 @@ import timetableRoutes from "./timetable.routes";
 import evaluationRoutes from "./evaluation.routes";
 import notificationRoutes from "./notification.routes";
 import miscRoutes from "./misc.routes";
+import teacherRoutes from "./teacher.routes";
+import validationRoutes from "./validation.routes";
+import disruptiveRoutes from "./disruptive.routes";
+import attendanceRoutes from "./attendance.routes";
+import calendarRoutes from "./calendar.routes";
+import credentialsExportRoutes from "./credentialsExport.routes";
 
 const router = Router();
 
@@ -29,6 +35,12 @@ router.use("/incidents", incidentRoutes);
 router.use("/timetable", timetableRoutes);
 router.use("/evaluations", evaluationRoutes);
 router.use("/notifications", notificationRoutes);
+router.use("/teachers", teacherRoutes);
+router.use("/validation", validationRoutes);
+router.use("/disruptive-reports", disruptiveRoutes);
+router.use("/attendance", attendanceRoutes);
+router.use("/calendar-events", calendarRoutes);
+router.use("/credentials-export", credentialsExportRoutes);
 router.use("/", miscRoutes);
 
 export default router;

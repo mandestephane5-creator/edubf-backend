@@ -7,8 +7,8 @@ import { z } from "zod";
 const router = Router();
 router.use(authenticate);
 
-router.get("/", authorize("ADMIN", "SURVEILLANT", "PARENT"), gradeController.list);
-router.post("/", authorize("ADMIN", "SURVEILLANT"), gradeController.create);
+router.get("/", authorize("ADMIN", "SURVEILLANT", "PARENT", "TEACHER"), gradeController.list);
+router.post("/", authorize("ADMIN", "SURVEILLANT", "TEACHER"), gradeController.create);
 router.put("/:id", authorize("ADMIN", "SURVEILLANT"), validateIdParam, gradeController.update);
 router.delete("/:id", authorize("ADMIN", "SURVEILLANT"), validateIdParam, gradeController.remove);
 

@@ -10,20 +10,25 @@ function monthRange(month: string) {
 }
 
 export const incidentService = {
-  async list(schoolId: string, filters: { classId?: string; studentId?: string; month?: string }) {
+  async list(
+    schoolId: string,
+    filters: { classId?: string; studentId?: string; month?: string },
+    options?: { onlyValidated?: boolean }
+  ) {
     return prisma.incident.findMany({
       where: {
         schoolId,
         studentId: filters.studentId,
         ...(filters.classId && { student: { classId: filters.classId } }),
         ...(filters.month && { date: monthRange(filters.month) }),
+        ...(options?.onlyValidated && { status: "VALIDATED" }),
       },
       include: { student: true, subject: true, enteredBy: { select: { email: true } } },
       orderBy: { date: "desc" },
     });
   },
 
-  async create(schoolId: string, enteredByUserId: string, input: CreateIncidentInput) {
+  async create(schoolId: string, enteredByUserId: string, input: CreateIncidentInput, enteredByRole?: string) {
     const student = await prisma.student.findFirst({ where: { id: input.studentId, schoolId } });
     if (!student) throw ApiError.badRequest("Élève invalide pour cette école");
 
@@ -32,8 +37,9 @@ export const incidentService = {
       if (!subject) throw ApiError.badRequest("Matière invalide pour cette école");
     }
 
+    const status = enteredByRole === "TEACHER" ? "PENDING" : "VALIDATED";
     return prisma.incident.create({
-      data: { schoolId, enteredByUserId, ...input },
+      data: { schoolId, enteredByUserId, status, ...input },
       include: { subject: true },
     });
   },

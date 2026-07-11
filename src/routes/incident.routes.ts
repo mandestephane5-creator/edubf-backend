@@ -6,8 +6,8 @@ import { validateIdParam } from "../middlewares/validate.middleware";
 const router = Router();
 router.use(authenticate);
 
-router.get("/", authorize("ADMIN", "SURVEILLANT", "PARENT"), incidentController.list);
-router.post("/", authorize("ADMIN", "SURVEILLANT"), incidentController.create);
+router.get("/", authorize("ADMIN", "SURVEILLANT", "PARENT", "TEACHER"), incidentController.list);
+router.post("/", authorize("ADMIN", "SURVEILLANT", "TEACHER"), incidentController.create);
 router.put("/:id", authorize("ADMIN", "SURVEILLANT"), validateIdParam, incidentController.update);
 router.delete("/:id", authorize("ADMIN", "SURVEILLANT"), validateIdParam, incidentController.remove);
 

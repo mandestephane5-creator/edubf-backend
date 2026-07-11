@@ -3,6 +3,7 @@ import { asyncHandler } from "../utils/asyncHandler";
 import { gradeService } from "../services/grade.service";
 import { notificationService } from "../services/notification.service";
 import { parentService } from "../services/parent.service";
+import { teacherService } from "../services/teacher.service";
 import { ApiError } from "../utils/ApiError";
 import { createGradeSchema, updateGradeSchema } from "../validators/academic.validator";
 
@@ -13,28 +14,39 @@ export const gradeController = {
     if (req.auth.role === "PARENT" && studentId) {
       await parentService.assertOwnsChild(req.auth.userId, studentId as string);
     }
-    const grades = await gradeService.list(req.auth.schoolId, {
-      classId: classId as string | undefined,
-      studentId: studentId as string | undefined,
-      subjectId: subjectId as string | undefined,
-      term: term as string | undefined,
-      academicYear: academicYear as string | undefined,
-    });
+    const grades = await gradeService.list(
+      req.auth.schoolId,
+      {
+        classId: classId as string | undefined,
+        studentId: studentId as string | undefined,
+        subjectId: subjectId as string | undefined,
+        term: term as string | undefined,
+        academicYear: academicYear as string | undefined,
+      },
+      { onlyValidated: req.auth.role === "PARENT" }
+    );
     res.json({ success: true, data: grades });
   }),
 
   create: asyncHandler(async (req: Request, res: Response) => {
     const input = createGradeSchema.parse(req.body);
-    const grade = await gradeService.create(req.auth!.schoolId, req.auth!.userId, input);
+    if (req.auth!.role === "TEACHER") {
+      await teacherService.assertAssigned(req.auth!.schoolId, req.auth!.userId, input.classId, input.subjectId);
+    }
+    const grade = await gradeService.create(req.auth!.schoolId, req.auth!.userId, input, req.auth!.role);
 
-    // Notification automatique aux parents de l'élève concerné
-    await notificationService.notifyParentsOfStudent(
-      req.auth!.schoolId,
-      input.studentId,
-      "NOTE",
-      "Nouvelle note",
-      `Une note de ${input.value}/${input.maxValue} a été ajoutée.`
-    );
+    // Si saisie directement par ADMIN/SURVEILLANT, la note est validée d'emblée : on notifie
+    // immédiatement. Si saisie par un professeur, elle reste "en attente" — la notification
+    // ne partira qu'au moment où le surveillant validera toute la classe.
+    if (req.auth!.role !== "TEACHER") {
+      await notificationService.notifyParentsOfStudent(
+        req.auth!.schoolId,
+        input.studentId,
+        "NOTE",
+        "Nouvelle note",
+        `Une note de ${input.value}/${input.maxValue} a été ajoutée.`
+      );
+    }
 
     res.status(201).json({ success: true, data: grade });
   }),

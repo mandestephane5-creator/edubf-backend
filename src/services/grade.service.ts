@@ -14,20 +14,27 @@ function classifyLabel(label: string | null): "composition" | "devoir" {
 export const gradeService = {
   async list(
     schoolId: string,
-    filters: { classId?: string; studentId?: string; subjectId?: string; term?: string; academicYear?: string }
+    filters: { classId?: string; studentId?: string; subjectId?: string; term?: string; academicYear?: string },
+    options?: { onlyValidated?: boolean }
   ) {
     return prisma.grade.findMany({
-      where: { schoolId, ...filters } as any,
+      where: { schoolId, ...filters, ...(options?.onlyValidated && { status: "VALIDATED" }) } as any,
       include: { student: true, subject: true, class: true, enteredBy: { select: { email: true } } },
       orderBy: { createdAt: "desc" },
     });
   },
 
-  async create(schoolId: string, enteredByUserId: string, input: CreateGradeInput) {
+  /**
+   * Une note saisie par un professeur part "en attente" et n'est visible aux parents
+   * qu'après validation du surveillant (par classe entière). Les notes saisies par
+   * ADMIN/SURVEILLANT sont validées d'emblée, comme avant.
+   */
+  async create(schoolId: string, enteredByUserId: string, input: CreateGradeInput, enteredByRole?: string) {
     const student = await prisma.student.findFirst({ where: { id: input.studentId, schoolId } });
     if (!student) throw ApiError.badRequest("Élève invalide pour cette école");
+    const status = enteredByRole === "TEACHER" ? "PENDING" : "VALIDATED";
     return prisma.grade.create({
-      data: { schoolId, enteredByUserId, ...input },
+      data: { schoolId, enteredByUserId, status, ...input },
       include: { subject: true, student: true },
     });
   },
