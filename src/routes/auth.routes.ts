@@ -24,5 +24,6 @@ router.post("/forgot-password", loginLimiter, authController.forgotPassword);
 router.post("/reset-password", authController.resetPassword);
 
 router.put("/change-parent-password", authenticate, authorize("PARENT"), authController.changeParentPassword);
+router.put("/change-password", authenticate, authorize("TEACHER"), authController.changeParentPassword);
 
 export default router;
