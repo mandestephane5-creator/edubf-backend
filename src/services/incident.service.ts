@@ -1,6 +1,12 @@
 import { prisma } from "../config/db";
 import { ApiError } from "../utils/ApiError";
 import { CreateIncidentInput } from "../validators/academic.validator";
+import { Prisma } from "@prisma/client";
+
+// Type explicite (plutôt qu'une référence circulaire à `typeof incidentService`,
+// qui empêchait TypeScript de compiler : il ne peut pas résoudre le type d'un objet
+// en train de se définir lui-même).
+type IncidentForExport = Prisma.IncidentGetPayload<{ include: { student: true; subject: true } }>;
 
 function monthRange(month: string) {
   const start = new Date(`${month}-01T00:00:00.000Z`);
@@ -80,7 +86,7 @@ export const incidentService = {
   },
 
   /** Construit le contenu CSV (texte) à partir de la liste d'incidents ci-dessus */
-  buildCsv(incidents: Awaited<ReturnType<typeof incidentService.listForExport>>) {
+  buildCsv(incidents: IncidentForExport[]) {
     const escape = (value: string) => `"${(value ?? "").replace(/"/g, '""')}"`;
     const header = ["Nom", "Prénom", "Type", "Date", "Heure", "Matière", "Motif"];
     const rows = incidents.map((i) => [

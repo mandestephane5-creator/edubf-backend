@@ -98,6 +98,14 @@ export const teacherService = {
     }));
   },
 
+  /** Vérifie que le professeur est bien assigné à cette classe (n'importe quelle matière) */
+  async assertAssignedToClass(schoolId: string, userId: string, classId: string) {
+    const assignment = await prisma.teacherAssignment.findFirst({
+      where: { schoolId, userId, classId },
+    });
+    if (!assignment) throw ApiError.forbidden("Vous n'êtes pas assigné à cette classe");
+  },
+
   /** Vérifie que le professeur est bien assigné à cette classe+matière avant de le laisser saisir */
   async assertAssigned(schoolId: string, userId: string, classId: string, subjectId: string) {
     const assignment = await prisma.teacherAssignment.findFirst({
