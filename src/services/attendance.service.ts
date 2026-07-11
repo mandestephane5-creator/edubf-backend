@@ -17,7 +17,9 @@ export const attendanceService = {
       studentId: s.id,
       firstName: s.firstName,
       lastName: s.lastName,
-      present: existingByStudent.has(s.id) ? existingByStudent.get(s.id) : null, // null = pas encore renseigné
+      // Par défaut "présent" (pas de valeur vide) : la plupart des élèves le sont chaque
+      // jour, l'enseignant n'a donc qu'à cliquer pour signaler les exceptions (absences).
+      present: existingByStudent.has(s.id) ? existingByStudent.get(s.id) : true,
     }));
   },
 
