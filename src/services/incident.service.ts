@@ -64,4 +64,34 @@ export const incidentService = {
       where: { schoolId, studentId, type: "ABSENCE", date: monthRange(month) },
     });
   },
+
+  /**
+   * Liste tous les incidents d'une classe sur une plage de dates (typiquement un
+   * trimestre), pour l'export CSV destiné aux surveillants (retraits de points de fin
+   * de trimestre). Aucune notion de "trimestre" n'existe en base — on filtre simplement
+   * par dates, à choisir par le surveillant.
+   */
+  async listForExport(schoolId: string, classId: string, startDate: Date, endDate: Date) {
+    return prisma.incident.findMany({
+      where: { schoolId, student: { classId }, date: { gte: startDate, lte: endDate } },
+      include: { student: true, subject: true },
+      orderBy: [{ student: { lastName: "asc" } }, { date: "asc" }],
+    });
+  },
+
+  /** Construit le contenu CSV (texte) à partir de la liste d'incidents ci-dessus */
+  buildCsv(incidents: Awaited<ReturnType<typeof incidentService.listForExport>>) {
+    const escape = (value: string) => `"${(value ?? "").replace(/"/g, '""')}"`;
+    const header = ["Nom", "Prénom", "Type", "Date", "Heure", "Matière", "Motif"];
+    const rows = incidents.map((i) => [
+      i.student.lastName,
+      i.student.firstName,
+      i.type,
+      new Date(i.date).toLocaleDateString("fr-FR"),
+      i.time ?? "",
+      i.subject?.name ?? "",
+      i.motif ?? "",
+    ]);
+    return [header, ...rows].map((row) => row.map(escape).join(",")).join("\n");
+  },
 };

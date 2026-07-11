@@ -70,4 +70,16 @@ export const incidentController = {
     await incidentService.remove(req.auth!.schoolId, req.params.id);
     res.status(204).send();
   }),
+
+  exportForClass: asyncHandler(async (req: Request, res: Response) => {
+    const { classId } = req.params;
+    const startDate = new Date(req.query.startDate as string);
+    const endDate = new Date(req.query.endDate as string);
+    const incidents = await incidentService.listForExport(req.auth!.schoolId, classId, startDate, endDate);
+    const csv = incidentService.buildCsv(incidents);
+
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="incidents-${classId}.csv"`);
+    res.send("\uFEFF" + csv); // \uFEFF = BOM, pour qu'Excel affiche correctement les accents
+  }),
 };
