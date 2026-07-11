@@ -8,10 +8,22 @@ import {
   bulkCreateStudentsSchema,
 } from "../validators/student.validator";
 import { ApiError } from "../utils/ApiError";
+import { prisma } from "../config/db";
 
 export const studentController = {
   list: asyncHandler(async (req: Request, res: Response) => {
     const { classId, search } = req.query;
+
+    // Sécurité : un professeur ne doit voir que les élèves des classes qui lui sont
+    // assignées — jamais n'importe quelle classe de l'école en changeant classId.
+    if (req.auth!.role === "TEACHER") {
+      if (!classId) throw ApiError.badRequest("classId requis pour un professeur");
+      const assignment = await prisma.teacherAssignment.findFirst({
+        where: { schoolId: req.auth!.schoolId, userId: req.auth!.userId, classId: classId as string },
+      });
+      if (!assignment) throw ApiError.forbidden("Vous n'êtes pas assigné à cette classe");
+    }
+
     const students = await studentService.list(req.auth!.schoolId, {
       classId: classId as string | undefined,
       search: search as string | undefined,

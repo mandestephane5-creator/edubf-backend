@@ -6,7 +6,7 @@ import { validateIdParam } from "../middlewares/validate.middleware";
 const router = Router();
 router.use(authenticate);
 
-router.get("/", authorize("ADMIN", "SURVEILLANT"), studentController.list);
+router.get("/", authorize("ADMIN", "SURVEILLANT", "TEACHER"), studentController.list);
 router.get("/check-parent-phone", authorize("ADMIN", "SURVEILLANT"), studentController.checkParentPhone);
 router.get("/:id", authorize("ADMIN", "SURVEILLANT", "PARENT"), validateIdParam, studentController.getById);
 router.get("/:id/grades", authorize("ADMIN", "SURVEILLANT", "PARENT"), validateIdParam, studentController.getGrades);

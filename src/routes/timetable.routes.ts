@@ -9,7 +9,7 @@ router.use(authenticate);
 
 router.get(
   "/class/:classId",
-  authorize("ADMIN", "SURVEILLANT", "PARENT"),
+  authorize("ADMIN", "SURVEILLANT", "PARENT", "TEACHER"),
   validateParams({ classId: z.string().uuid() }),
   timetableController.getForClass
 );
