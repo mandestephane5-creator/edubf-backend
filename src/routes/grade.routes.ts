@@ -9,8 +9,10 @@ router.use(authenticate);
 
 router.get("/", authorize("ADMIN", "SURVEILLANT", "PARENT", "TEACHER"), gradeController.list);
 router.post("/", authorize("ADMIN", "SURVEILLANT", "TEACHER"), gradeController.create);
-router.put("/:id", authorize("ADMIN", "SURVEILLANT"), validateIdParam, gradeController.update);
+router.post("/batch", authorize("ADMIN", "SURVEILLANT", "TEACHER"), gradeController.createBatch);
+router.put("/:id", authorize("ADMIN", "SURVEILLANT", "TEACHER"), validateIdParam, gradeController.update);
 router.delete("/:id", authorize("ADMIN", "SURVEILLANT"), validateIdParam, gradeController.remove);
+router.get("/:id/audit-log", authorize("ADMIN", "SURVEILLANT", "TEACHER"), validateIdParam, gradeController.auditLogForGrade);
 
 router.get(
   "/student/:studentId/average",
@@ -32,5 +34,13 @@ router.get(
 );
 
 router.get("/audit-log", authorize("ADMIN", "SURVEILLANT"), gradeController.auditLog);
+router.get("/stats/teacher", authorize("TEACHER", "ADMIN", "SURVEILLANT"), gradeController.teacherStats);
+router.get("/stats/school", authorize("ADMIN", "SURVEILLANT"), gradeController.schoolStats);
+router.get(
+  "/stats/repeaters/:classId",
+  authorize("ADMIN", "SURVEILLANT"),
+  validateParams({ classId: z.string().uuid() }),
+  gradeController.repeaters
+);
 
 export default router;

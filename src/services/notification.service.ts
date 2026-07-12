@@ -38,6 +38,17 @@ export const notificationService = {
     await sendPushToUsers(userIds, title, message);
   },
 
+  /**
+   * Notifie tous les surveillants et l'admin de l'école — utilisé quand un professeur
+   * soumet des notes/incidents en attente de validation.
+   */
+  async notifyStaffValidators(schoolId: string, title: string, message: string) {
+    const staff = await prisma.user.findMany({
+      where: { schoolId, role: { in: ["SURVEILLANT", "ADMIN"] }, isActive: true },
+    });
+    await this.broadcastToUsers(schoolId, staff.map((s) => s.id), "SYSTEME", title, message);
+  },
+
   async markAsRead(schoolId: string, userId: string, id: string) {
     const notif = await prisma.notification.findFirst({ where: { id, schoolId, userId } });
     if (!notif) throw ApiError.notFound("Notification introuvable");

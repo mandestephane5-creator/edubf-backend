@@ -18,6 +18,17 @@ export const createGradeSchema = z.object({
 });
 export const updateGradeSchema = createGradeSchema.partial();
 
+// Soumission d'une série de notes en une fois (ex: tout un Devoir 1 pour une classe) —
+// permet d'envoyer UNE seule notification de validation, plutôt qu'une par élève.
+export const createGradeBatchSchema = z.object({
+  classId: z.string().uuid(),
+  subjectId: z.string().uuid(),
+  term: termEnum,
+  academicYear: z.string().min(4),
+  label: z.string(),
+  items: z.array(z.object({ studentId: z.string().uuid(), value: z.number().min(0), maxValue: z.number().min(1).default(20) })).min(1),
+});
+
 // ---- Incidents ----
 // Absence/Retard: date uniquement. Expulsion: date + heure + matière + motif.
 export const createIncidentSchema = z

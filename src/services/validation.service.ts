@@ -81,6 +81,8 @@ export const validationService = {
     const { grades, incidents } = await this.getPendingDetailForClass(schoolId, classId);
     if (grades.length === 0 && incidents.length === 0) return { validatedGrades: 0, validatedIncidents: 0 };
 
+    const cls = await prisma.class.findUnique({ where: { id: classId } });
+
     await prisma.$transaction([
       prisma.grade.updateMany({ where: { schoolId, classId, status: "PENDING" }, data: { status: "VALIDATED" } }),
       prisma.incident.updateMany({
@@ -98,6 +100,21 @@ export const validationService = {
         "NOTE",
         "Nouvelles notes disponibles",
         "De nouvelles notes ou informations ont été validées par l'école."
+      );
+    }
+
+    // Notifie aussi le(s) professeur(s) à l'origine de ces notes/incidents — seulement
+    // ceux dont le compte est bien un TEACHER (pas l'admin/surveillant lui-même).
+    const teacherUserIds = new Set<string>();
+    for (const g of grades) if (g.enteredBy.role === "TEACHER") teacherUserIds.add(g.enteredByUserId);
+    for (const i of incidents) if (i.enteredBy.role === "TEACHER") teacherUserIds.add(i.enteredByUserId);
+    if (teacherUserIds.size > 0) {
+      await notificationService.broadcastToUsers(
+        schoolId,
+        Array.from(teacherUserIds),
+        "SYSTEME",
+        "Soumission validée",
+        `Vos notes/incidents pour ${cls?.name ?? "votre classe"} ont été validés et sont maintenant visibles aux parents.`
       );
     }
 

@@ -1,6 +1,10 @@
 import { prisma } from "../config/db";
 import { ApiError } from "../utils/ApiError";
 import { CreateGradeInput } from "../validators/academic.validator";
+import { z } from "zod";
+import { createGradeBatchSchema } from "../validators/academic.validator";
+
+type GradeBatchInput = z.infer<typeof createGradeBatchSchema>;
 
 /**
  * Classe un libellé de note en "composition" ou "devoir" (tout le reste : Devoir 1,
@@ -39,11 +43,67 @@ export const gradeService = {
     });
   },
 
-  async update(schoolId: string, id: string, performedByUserId: string, input: Partial<CreateGradeInput>) {
+  /**
+   * Soumet toute une série de notes en une fois (ex: le Devoir 1 de toute une classe) —
+   * une note existante pour le même élève+matière+trimestre+libellé est mise à jour
+   * plutôt que dupliquée. Utilisé par le professeur pour éviter d'envoyer une
+   * notification de validation par élève plutôt qu'une seule pour toute la série.
+   */
+  async createBatch(schoolId: string, enteredByUserId: string, batch: GradeBatchInput, enteredByRole?: string) {
+    const status = enteredByRole === "TEACHER" ? "PENDING" : "VALIDATED";
+    const results = [];
+    for (const item of batch.items) {
+      const existing = await prisma.grade.findFirst({
+        where: {
+          schoolId,
+          studentId: item.studentId,
+          subjectId: batch.subjectId,
+          term: batch.term,
+          academicYear: batch.academicYear,
+          label: batch.label,
+        },
+      });
+      const grade = existing
+        ? await prisma.grade.update({ where: { id: existing.id }, data: { value: item.value, maxValue: item.maxValue, status } })
+        : await prisma.grade.create({
+            data: {
+              schoolId,
+              enteredByUserId,
+              status,
+              studentId: item.studentId,
+              classId: batch.classId,
+              subjectId: batch.subjectId,
+              term: batch.term,
+              academicYear: batch.academicYear,
+              label: batch.label,
+              value: item.value,
+              maxValue: item.maxValue,
+            },
+          });
+      results.push(grade);
+    }
+    return results;
+  },
+
+  async update(
+    schoolId: string,
+    id: string,
+    performedByUserId: string,
+    input: Partial<CreateGradeInput>,
+    performedByRole?: string
+  ) {
     const grade = await prisma.grade.findFirst({ where: { id, schoolId }, include: { student: true, subject: true } });
     if (!grade) throw ApiError.notFound("Note introuvable");
 
-    const updated = await prisma.grade.update({ where: { id }, data: input });
+    // Si un professeur corrige une note déjà validée (donc déjà visible au parent), elle
+    // repasse en attente — le surveillant devra la revalider avant que le parent ne voie
+    // la version corrigée. Une note saisie directement par admin/surveillant reste validée.
+    const shouldResetToPending = performedByRole === "TEACHER" && grade.status === "VALIDATED";
+
+    const updated = await prisma.grade.update({
+      where: { id },
+      data: { ...input, ...(shouldResetToPending && { status: "PENDING" }) },
+    });
 
     if (input.value !== undefined && input.value !== grade.value) {
       await prisma.gradeAuditLog.create({
@@ -61,6 +121,15 @@ export const gradeService = {
     }
 
     return updated;
+  },
+
+  /** Historique des modifications d'une note précise (pour l'écran de correction du professeur) */
+  async auditLogForGrade(schoolId: string, gradeId: string) {
+    return prisma.gradeAuditLog.findMany({
+      where: { schoolId, gradeId },
+      include: { performedBy: { select: { email: true, firstName: true, lastName: true } } },
+      orderBy: { createdAt: "desc" },
+    });
   },
 
   async remove(schoolId: string, id: string, performedByUserId: string) {
@@ -189,6 +258,127 @@ export const gradeService = {
     if (withGrades.length === 0) return { average: 0, studentCount: ranking.length };
     const avg = withGrades.reduce((sum, r) => sum + r.average, 0) / withGrades.length;
     return { average: round2(avg), studentCount: ranking.length };
+  },
+
+  /**
+   * Statistiques pour un professeur, limitées à SA classe+matière : répartition des
+   * élèves par tranche, comparaison Devoir 1 vs Devoir 2, et la liste des élèves en
+   * échec aux DEUX devoirs (à repérer et sur qui agir en priorité).
+   */
+  async computeTeacherStats(schoolId: string, classId: string, subjectId: string, term: string, academicYear: string) {
+    const [students, grades] = await Promise.all([
+      prisma.student.findMany({ where: { schoolId, classId } }),
+      prisma.grade.findMany({ where: { schoolId, classId, subjectId, term: term as any, academicYear } }),
+    ]);
+
+    const byStudent = new Map<string, { devoir1?: number; devoir2?: number; composition?: number }>();
+    for (const g of grades) {
+      const normalized = (g.value / g.maxValue) * 20;
+      const entry = byStudent.get(g.studentId) ?? {};
+      const label = (g.label || "").toLowerCase();
+      if (label.includes("composition")) entry.composition = normalized;
+      else if (label.includes("2")) entry.devoir2 = normalized;
+      else entry.devoir1 = normalized;
+      byStudent.set(g.studentId, entry);
+    }
+
+    const bands = { below10: 0, between10and15: 0, between15and20: 0 };
+    const failedBoth: { studentId: string; firstName: string; lastName: string }[] = [];
+    let devoir1Sum = 0, devoir1Count = 0, devoir2Sum = 0, devoir2Count = 0;
+
+    for (const s of students) {
+      const entry = byStudent.get(s.id);
+      if (!entry) continue;
+
+      const devoirsAvg =
+        entry.devoir1 !== undefined && entry.devoir2 !== undefined
+          ? (entry.devoir1 + entry.devoir2) / 2
+          : entry.devoir1 ?? entry.devoir2;
+      const subjectAvg =
+        devoirsAvg !== undefined && entry.composition !== undefined
+          ? (devoirsAvg + entry.composition) / 2
+          : devoirsAvg ?? entry.composition;
+
+      if (subjectAvg !== undefined) {
+        if (subjectAvg < 10) bands.below10++;
+        else if (subjectAvg < 15) bands.between10and15++;
+        else bands.between15and20++;
+      }
+
+      if (entry.devoir1 !== undefined) { devoir1Sum += entry.devoir1; devoir1Count++; }
+      if (entry.devoir2 !== undefined) { devoir2Sum += entry.devoir2; devoir2Count++; }
+
+      if (entry.devoir1 !== undefined && entry.devoir2 !== undefined && entry.devoir1 < 10 && entry.devoir2 < 10) {
+        failedBoth.push({ studentId: s.id, firstName: s.firstName, lastName: s.lastName });
+      }
+    }
+
+    return {
+      bands,
+      devoir1Average: devoir1Count > 0 ? round2(devoir1Sum / devoir1Count) : null,
+      devoir2Average: devoir2Count > 0 ? round2(devoir2Sum / devoir2Count) : null,
+      failedBoth,
+    };
+  },
+
+  /**
+   * Statistiques pour la direction : par classe et par matière, plus le taux de
+   * réussite interne (élèves admis ÷ élèves ayant composé) — à l'échelle d'une classe
+   * ou de l'école entière. Les redoublants (fin d'année) sont calculés séparément.
+   */
+  async computeSchoolStats(schoolId: string, term: string, academicYear: string) {
+    const classes = await prisma.class.findMany({ where: { schoolId }, orderBy: { name: "asc" } });
+
+    const perClass = await Promise.all(
+      classes.map(async (c) => {
+        const ranking = await this.computeClassRanking(schoolId, c.id, term, academicYear);
+        const composed = ranking.filter((r) => r.average > 0);
+        const passing = composed.filter((r) => r.average >= 10);
+        return {
+          classId: c.id,
+          className: c.name,
+          composedCount: composed.length,
+          passingCount: passing.length,
+          successRate: composed.length > 0 ? round2((passing.length / composed.length) * 100) : 0,
+        };
+      })
+    );
+
+    const totalComposed = perClass.reduce((sum, c) => sum + c.composedCount, 0);
+    const totalPassing = perClass.reduce((sum, c) => sum + c.passingCount, 0);
+
+    return {
+      perClass,
+      schoolWide: {
+        composedCount: totalComposed,
+        passingCount: totalPassing,
+        successRate: totalComposed > 0 ? round2((totalPassing / totalComposed) * 100) : 0,
+      },
+    };
+  },
+
+  /**
+   * Redoublants de fin d'année : moyenne annuelle < 10, calculée en combinant les 3
+   * trimestres (moyenne des moyennes trimestrielles disponibles).
+   */
+  async computeRepeatersForClass(schoolId: string, classId: string, academicYear: string) {
+    const students = await prisma.student.findMany({ where: { schoolId, classId } });
+    const results = await Promise.all(
+      students.map(async (s) => {
+        const terms = ["TRIMESTRE_1", "TRIMESTRE_2", "TRIMESTRE_3"];
+        const averages = [];
+        for (const term of terms) {
+          const { average } = await this.computeStudentAverage(schoolId, s.id, term, academicYear);
+          if (average > 0) averages.push(average);
+        }
+        const annualAverage = averages.length > 0 ? round2(averages.reduce((a, b) => a + b, 0) / averages.length) : 0;
+        return { studentId: s.id, firstName: s.firstName, lastName: s.lastName, annualAverage, repeating: annualAverage > 0 && annualAverage < 10 };
+      })
+    );
+    return {
+      repeaters: results.filter((r) => r.repeating),
+      promoted: results.filter((r) => !r.repeating && r.annualAverage > 0),
+    };
   },
 };
 
